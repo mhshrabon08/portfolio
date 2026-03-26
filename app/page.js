@@ -1,8 +1,13 @@
 'use client';
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
+  const [openMenu, setOpenMenu] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
   useEffect(() => {
     const phrases = [
       'no code needed',
@@ -32,6 +37,40 @@ export default function Home() {
     timer = setTimeout(tick, 1200);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const handle = () => setOpenMenu(null);
+    document.addEventListener('click', handle);
+    return () => document.removeEventListener('click', handle);
+  }, [openMenu]);
+
+  const menuDropdown = (id) => openMenu === id ? (
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'#161b22',border:'1px solid #30363d',borderRadius:10,minWidth:260,zIndex:999,boxShadow:'0 8px 30px rgba(0,0,0,0.55)',overflow:'hidden'}}
+    >
+      <button
+        onClick={() => { setOpenMenu(null); router.push('/portfolio'); }}
+        style={{display:'block',width:'100%',padding:'14px 18px',background:'none',border:'none',borderBottom:'1px solid #21262d',color:'#e6edf3',textAlign:'left',cursor:'pointer',fontSize:'0.88rem',fontWeight:600,fontFamily:'Nunito,sans-serif'}}
+        onMouseEnter={e=>e.currentTarget.style.background='#21262d'}
+        onMouseLeave={e=>e.currentTarget.style.background='none'}
+      >
+        🆕 I&apos;m new here
+        <div style={{fontSize:'0.72rem',color:'#8b949e',fontWeight:400,marginTop:3}}>Create a brand-new portfolio</div>
+      </button>
+      <button
+        onClick={() => { setOpenMenu(null); setShowLoginModal(true); }}
+        style={{display:'block',width:'100%',padding:'14px 18px',background:'none',border:'none',color:'#e6edf3',textAlign:'left',cursor:'pointer',fontSize:'0.88rem',fontWeight:600,fontFamily:'Nunito,sans-serif'}}
+        onMouseEnter={e=>e.currentTarget.style.background='#21262d'}
+        onMouseLeave={e=>e.currentTarget.style.background='none'}
+      >
+        🔑 I already have a portfolio
+        <div style={{fontSize:'0.72rem',color:'#8b949e',fontWeight:400,marginTop:3}}>Sign in to edit your existing one</div>
+      </button>
+    </div>
+  ) : null;
+
   return (
     <>
       <style>{`
@@ -127,6 +166,7 @@ export default function Home() {
           transition: opacity 0.2s;
         }
         .nav-cta:hover { opacity: 0.88; }
+        button.nav-cta, button.btn-primary { border: none; cursor: pointer; font-family: 'Nunito', sans-serif; }
 
         /* ── HERO ── */
         .hero {
@@ -510,7 +550,12 @@ export default function Home() {
       {/* NAV */}
       <nav>
         <span className="nav-brand">&lt;boundforthetop /&gt;</span>
-        <Link href="/portfolio" className="nav-cta">Build Your Portfolio →</Link>
+        <div style={{position:'relative',display:'inline-block'}}>
+          <button className="nav-cta" onClick={e=>{e.stopPropagation();setOpenMenu(p=>p==='nav'?null:'nav');}}>
+            Build Your Portfolio →
+          </button>
+          {menuDropdown('nav')}
+        </div>
       </nav>
 
       {/* HERO */}
@@ -525,7 +570,12 @@ export default function Home() {
           Fill in your details, pick a theme, hit publish. Get a real URL you can share with anyone — instantly.
         </p>
         <div className="hero-actions">
-          <Link href="/portfolio" className="btn-primary">Build Your Portfolio →</Link>
+          <div style={{position:'relative',display:'inline-block'}}>
+            <button className="btn-primary" onClick={e=>{e.stopPropagation();setOpenMenu(p=>p==='hero'?null:'hero');}}>
+              Build Your Portfolio →
+            </button>
+            {menuDropdown('hero')}
+          </div>
           <a href="#how" className="btn-ghost">See how it works</a>
         </div>
         <p style={{marginTop:20,fontSize:'0.72rem',color:'var(--muted)',fontFamily:"'IBM Plex Mono',monospace",display:'flex',alignItems:'center',gap:6}}>
@@ -622,9 +672,12 @@ export default function Home() {
         <div className="cta-inner">
           <div className="cta-title">Ready to go live?</div>
           <p className="cta-sub">Free forever. No account needed. Just fill in and publish.</p>
-          <Link href="/portfolio" className="btn-primary" style={{display:'inline-flex'}}>
-            Build Your Portfolio →
-          </Link>
+          <div style={{position:'relative',display:'inline-block'}}>
+            <button className="btn-primary" onClick={e=>{e.stopPropagation();setOpenMenu(p=>p==='cta'?null:'cta');}}>
+              Build Your Portfolio →
+            </button>
+            {menuDropdown('cta')}
+          </div>
         </div>
       </div>
 
@@ -636,7 +689,89 @@ export default function Home() {
         </div>
       </footer>
 
+      {showLoginModal && <HasPortfolioModal onClose={() => setShowLoginModal(false)} />}
 
     </>
+  );
+}
+
+function HasPortfolioModal({ onClose }) {
+  const router = useRouter();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const uname = username.toLowerCase().trim();
+      const res = await fetch('/api/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: uname, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Incorrect credentials.'); return; }
+      const session = { ...data, password, ts: Date.now() };
+      try { sessionStorage.setItem(`edit_${uname}`, JSON.stringify(session)); } catch(e) {}
+      router.push(`/${uname}/edit`);
+    } catch {
+      setError('Connection error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'#161b22',border:'1px solid #30363d',borderRadius:12,padding:'32px 36px',width:'100%',maxWidth:400,fontFamily:'Inter,sans-serif'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+          <div>
+            <div style={{fontFamily:'JetBrains Mono,monospace',color:'#0ea5e9',fontSize:'0.82rem',marginBottom:4}}>&lt;sign-in /&gt;</div>
+            <h2 style={{fontSize:'1.1rem',fontWeight:700,color:'#e6edf3',margin:0}}>Access your portfolio</h2>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'#8b949e',cursor:'pointer',fontSize:'1.2rem',lineHeight:1,padding:0}}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{marginBottom:14}}>
+            <label style={{display:'block',fontSize:'0.68rem',color:'#8b949e',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.06em'}}>Username</label>
+            <input
+              value={username}
+              onChange={e=>setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,''))}
+              placeholder="your-username"
+              style={{width:'100%',padding:'10px 14px',background:'#21262d',border:'1px solid #30363d',borderRadius:8,color:'#e6edf3',fontSize:'0.88rem',outline:'none',boxSizing:'border-box'}}
+              required
+              autoFocus
+            />
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={{display:'block',fontSize:'0.68rem',color:'#8b949e',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.06em'}}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e=>setPassword(e.target.value)}
+              placeholder="Your portfolio password"
+              style={{width:'100%',padding:'10px 14px',background:'#21262d',border:'1px solid #30363d',borderRadius:8,color:'#e6edf3',fontSize:'0.88rem',outline:'none',boxSizing:'border-box'}}
+              required
+            />
+          </div>
+          {error && (
+            <p style={{fontSize:'0.76rem',color:'#f87171',marginBottom:12,padding:'8px 12px',background:'rgba(248,113,113,0.1)',borderRadius:6,border:'1px solid rgba(248,113,113,0.25)'}}>
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={loading || !username || !password}
+            style={{width:'100%',padding:'12px',borderRadius:8,background:loading?'#21262d':'#0ea5e9',border:'none',color:'#000',fontWeight:700,fontSize:'0.9rem',cursor:loading||!username||!password?'not-allowed':'pointer',opacity:(!username||!password)?0.5:1,transition:'background 0.2s'}}
+          >
+            {loading ? 'Verifying…' : '🔓 Go to Editor'}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
